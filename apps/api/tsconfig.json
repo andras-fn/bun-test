@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "types": ["@types/bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@repo/database": ["../../packages/database/src"],
+      "@repo/database/*": ["../../packages/database/src/*"],
+      "@repo/types": ["../../packages/types/src"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

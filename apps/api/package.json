@@ -1,0 +1,26 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --elide-lines=0 --hot src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.3.0",
+    "bcryptjs": "^3.0.2",
+    "better-auth": "^1.3.27",
+    "cors": "^2.8.5",
+    "hono": "^3.11.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/bun": "latest",
+    "@types/cors": "^2.8.17",
+    "@types/jsonwebtoken": "^9.0.5",
+    "typescript": "^5.0.0"
+  }
+}

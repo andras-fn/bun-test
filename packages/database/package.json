@@ -1,0 +1,20 @@
+{
+    "name": "@repo/database",
+    "version": "0.1.0",
+    "main": "src/index.ts",
+    "devDependencies": {
+        "typescript": "^5.9.3"
+    },
+    "private": true,
+    "scripts": {
+        "generate": "drizzle-kit generate",
+        "migrate": "bun run src/migrate.ts",
+        "push": "drizzle-kit push",
+        "studio": "drizzle-kit studio",
+        "type-check": "tsc --noEmit"
+    },
+    "dependencies": {
+        "drizzle-kit": "^0.31.5",
+        "drizzle-orm": "^0.44.6"
+    }
+}

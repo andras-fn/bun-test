@@ -282,10 +282,14 @@ bun run docker:up
 The Docker setup includes:
 
 - **PostgreSQL**: Database service with persistent volume
-- **API Server**: Hono backend with Better Auth
-- **Web App**: React frontend built and served by nginx
-- **nginx**: Reverse proxy and static file server
-- **Migration**: Automatic database schema deployment
+- **API Server**: Hono backend with Better Auth and Bun's native PostgreSQL driver
+- **Web App**: React frontend with Router v7 built and served by nginx
+- **nginx Proxy**: Reverse proxy and static file server with React Router v7 support
+- **Migration**: Automatic database schema deployment using Drizzle
+
+**nginx Configuration:**
+- `nginx/nginx.conf` - Main proxy configuration (used by docker-compose)
+- `apps/web/nginx.conf` - Web container nginx configuration for static files
 
 ### Manual Docker Commands
 
