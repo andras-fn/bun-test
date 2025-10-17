@@ -247,8 +247,8 @@ export const { signIn, signUp, signOut, useSession } = createAuthClient({
 ```typescript
 // Using Bun's native PostgreSQL driver with Drizzle
 import { drizzle } from "drizzle-orm/bun-sql";
-import { SQL } from "bun";
 
+// Use Bun's native SQL client (no external drivers needed)
 const sql = new SQL(process.env.DATABASE_URL);
 export const db = drizzle({ client: sql, schema });
 ```
@@ -424,5 +424,3 @@ Built with ❤️ using Bun's native capabilities and modern web technologies
 - [Better Auth](https://www.better-auth.com)
 - [Hono Framework](https://hono.dev)
 - [TanStack Query](https://tanstack.com/query)
- 
- 
