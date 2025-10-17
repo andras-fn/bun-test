@@ -1,0 +1,27 @@
+# Test 5: Scratch + static linking attempt
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+RUN echo "=== Test 5: Scratch + static attempt ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64-musl-modern \
+    --minify \
+    --define:process.env.NODE_ENV=\"production\" && \
+    chmod +x app && \
+    echo "Size: $(du -h app)" && \
+    echo "Dependencies:" && \
+    (ldd ./app || echo "Static binary")
+
+# Attempt scratch (smallest possible)
+FROM scratch
+COPY --from=builder /app/apps/api/app /app
+EXPOSE 3001
+ENTRYPOINT ["/app"]

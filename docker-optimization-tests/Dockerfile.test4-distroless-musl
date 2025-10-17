@@ -1,0 +1,27 @@
+# Test 4: Distroless + modern + musl (security focused)
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+RUN echo "=== Test 4: Distroless + modern + musl ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64-musl-modern \
+    --minify \
+    --bytecode && \
+    chmod +x app && \
+    echo "Size: $(du -h app)"
+
+# Distroless for maximum security + minimal size
+FROM gcr.io/distroless/cc-debian12
+WORKDIR /app
+COPY --from=builder /app/apps/api/app ./app
+USER 1000
+EXPOSE 3001
+ENTRYPOINT ["./app"]

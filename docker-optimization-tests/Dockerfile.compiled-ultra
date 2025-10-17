@@ -1,0 +1,62 @@
+# Ultra-optimized Bun executable with symbol stripping
+FROM oven/bun:1.3-alpine AS builder
+
+# Install binutils for strip command
+RUN apk add --no-cache binutils
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+
+# Compile with maximum optimization + symbol stripping
+RUN echo "=== Ultra-optimized compilation ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64 \
+    --minify \
+    --define:process.env.NODE_ENV=\"production\" \
+    --sourcemap=none && \
+    chmod +x app && \
+    echo "Before stripping: $(du -h app)" && \
+    strip --strip-all app && \
+    echo "After stripping: $(du -h app)"
+
+# Minimal Alpine runtime with aggressive cleanup
+FROM alpine:3.19
+
+# Install minimal dependencies and clean up aggressively
+RUN apk add --no-cache \
+    libstdc++ \
+    libgcc && \
+    # Remove package manager cache and documentation
+    rm -rf \
+    /var/cache/apk/* \
+    /tmp/* \
+    /var/tmp/* \
+    /usr/share/man/* \
+    /usr/share/doc/* \
+    /usr/share/info/* \
+    /usr/share/locale/* && \
+    # Create minimal user
+    adduser -D -s /sbin/nologin -u 1000 app
+
+WORKDIR /app
+
+# Copy only the stripped executable
+COPY --from=builder /app/apps/api/app ./app
+
+# Minimal ownership setup
+RUN chown app:app ./app
+
+USER app
+EXPOSE 3001
+CMD ["./app"]

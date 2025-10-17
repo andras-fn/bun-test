@@ -1,10 +1,8 @@
 import { drizzle } from "drizzle-orm/bun-sql";
 import * as schema from "./schema";
 
-// Declare SQL globally as Bun provides it
-declare global {
-  const SQL: new (connectionString: string) => any;
-}
+// Import SQL from Bun (works in both runtime and compiled executables)
+import { SQL } from "bun";
 
 const connectionString =
   process.env.DATABASE_URL ||

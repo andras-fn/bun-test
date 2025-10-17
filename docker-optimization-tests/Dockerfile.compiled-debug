@@ -1,0 +1,106 @@
+# Dockerfile.compiled - DEBUG VERSION with comprehensive logging
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database  
+COPY apps/api ./apps/api
+
+# Debug: Show what we copied
+RUN echo "=== BUILDER DEBUG: Files copied ===" && \
+    echo "Working directory: $(pwd)" && \
+    echo "Root contents:" && ls -la && \
+    echo "Apps/api contents:" && ls -la apps/api/
+
+# Install dependencies
+RUN bun install --frozen-lockfile && \
+    echo "=== BUILDER DEBUG: Dependencies installed ==="
+
+WORKDIR /app/apps/api
+RUN echo "=== BUILDER DEBUG: Changed to apps/api ===" && \
+    echo "Current directory: $(pwd)" && \
+    echo "Contents:" && ls -la
+
+# Compile to single executable with extensive debugging
+RUN echo "=== BUILDER DEBUG: Starting compilation ===" && \
+    echo "Bun version: $(bun --version)" && \
+    echo "Compiling src/index.ts to app..." && \
+    bun build src/index.ts --compile --outfile=app --target=bun-linux-x64 --minify && \
+    echo "=== BUILDER DEBUG: Compilation completed ===" && \
+    echo "Files after compilation:" && ls -la && \
+    echo "App file details:" && \
+    ls -la app && \
+    echo "App file size: $(du -h app)" && \
+    echo "App file type: $(file app 2>/dev/null || echo 'file command not available')" && \
+    chmod +x app && \
+    echo "App permissions after chmod: $(ls -la app)" && \
+    echo "Full path to app: $(pwd)/app" && \
+    echo "Testing app exists: $(test -f app && echo 'EXISTS' || echo 'NOT FOUND')" && \
+    echo "Testing app executable: $(test -x app && echo 'EXECUTABLE' || echo 'NOT EXECUTABLE')"
+
+# Use glibc-compatible base (Bun executables need glibc, not musl)
+FROM debian:12-slim AS production
+
+# Install debugging tools and runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates file libc-bin && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Debug: Show production environment before copy
+RUN echo "=== PRODUCTION DEBUG: Before copy ===" && \
+    echo "Production working directory: $(pwd)" && \
+    echo "Production contents:" && ls -la
+
+# Copy the executable with debugging
+COPY --from=builder /app/apps/api/app ./app
+RUN echo "=== PRODUCTION DEBUG: After copy ===" && \
+    echo "Production contents after copy:" && ls -la && \
+    echo "App file details:" && \
+    ls -la app && \
+    echo "App file size: $(du -h app)" && \
+    echo "App file type: $(file app)" && \
+    echo "Full path to app: $(pwd)/app" && \
+    echo "Absolute path test: $(readlink -f app)" && \
+    echo "Testing app exists: $(test -f app && echo 'EXISTS' || echo 'NOT FOUND')" && \
+    echo "Testing app readable: $(test -r app && echo 'READABLE' || echo 'NOT READABLE')"
+
+# Create non-root user and set permissions
+RUN useradd -m -s /bin/bash appuser && \
+    chown appuser:appuser ./app && \
+    chmod +x ./app && \
+    echo "=== PRODUCTION DEBUG: After permissions ===" && \
+    echo "Final app permissions: $(ls -la app)" && \
+    echo "Owner check: $(stat -c '%U:%G' app)" && \
+    echo "Permission bits: $(stat -c '%a' app)"
+
+# Test dependencies
+RUN echo "=== PRODUCTION DEBUG: Dependency check ===" && \
+    echo "Library dependencies:" && \
+    (ldd ./app || echo "ldd failed - might be statically linked") && \
+    echo "Missing libraries test:" && \
+    (ldd ./app | grep "not found" || echo "No missing libraries found")
+
+USER appuser
+
+# Final debug as the app user
+RUN echo "=== PRODUCTION DEBUG: As app user ===" && \
+    echo "Current user: $(whoami)" && \
+    echo "Current working directory: $(pwd)" && \
+    echo "App file from user perspective:" && ls -la app && \
+    echo "Can read app: $(test -r app && echo 'YES' || echo 'NO')" && \
+    echo "Can execute app: $(test -x app && echo 'YES' || echo 'NO')"
+
+EXPOSE 3001
+
+# Test the executable before running it
+RUN echo "=== PRODUCTION DEBUG: Pre-execution test ===" && \
+    echo "Attempting to get app version/help:" && \
+    (timeout 2 ./app --version 2>&1 || echo "Version check failed/timed out") && \
+    echo "Ready to run app"
+
+# Run the executable
+CMD ["./app"]

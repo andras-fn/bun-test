@@ -1,0 +1,52 @@
+# Production-optimized Bun executable using official best practices
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+
+# Compile using official production recommendations + additional optimizations
+RUN echo "=== Production-optimized compilation (following Bun docs) ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64-baseline \
+    --minify \
+    --sourcemap \
+    --bytecode \
+    --define:process.env.NODE_ENV=\"production\" \
+    --asset-naming="[name].[ext]" && \
+    chmod +x app && \
+    echo "Final optimized size: $(du -h app)"
+
+# Minimal Alpine runtime with only essential dependencies
+FROM alpine:3.19
+
+# Install minimal C++ runtime (required for Bun executables)
+RUN apk add --no-cache libstdc++ libgcc && \
+    rm -rf /var/cache/apk/* && \
+    adduser -D -s /sbin/nologin -u 1000 app
+
+WORKDIR /app
+
+# Copy the optimized executable
+COPY --from=builder /app/apps/api/app ./app
+
+RUN chown app:app ./app
+
+USER app
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD timeout 5 wget -qO- http://localhost:3001/health || exit 1
+
+CMD ["./app"]

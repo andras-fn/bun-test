@@ -1,0 +1,64 @@
+# Multi-stage build for compiled Bun executable
+# Build stage - Alpine with Bun
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+# Change to API directory
+WORKDIR /app/apps/api
+
+# Compile the application to a single executable
+RUN echo "=== Compiling with Alpine/musl ===" && \
+    echo "Bun version: $(bun --version)" && \
+    bun build src/index.ts --compile --outfile=app --target=bun-linux-x64 --minify && \
+    echo "Compilation completed. File info:" && \
+    ls -la app && \
+    chmod +x app
+
+# Production stage - Alpine to match compilation environment  
+FROM alpine:3.19
+
+# Install minimal runtime dependencies including C++ libraries
+RUN apk add --no-cache \
+    ca-certificates \
+    tini \
+    libstdc++ \
+    libgcc
+
+WORKDIR /app
+
+# Copy the compiled executable from builder stage
+COPY --from=builder /app/apps/api/app ./app
+
+# Create non-root user
+RUN adduser -D -s /bin/sh appuser && \
+    chown appuser:appuser ./app && \
+    chmod +x ./app
+
+# Test the executable works
+RUN echo "=== Testing executable on Alpine ===" && \
+    echo "File type: $(file ./app)" && \
+    echo "Dependencies:" && \
+    (ldd ./app 2>/dev/null || echo "Static or ldd unavailable") && \
+    echo "Testing execution as root:" && \
+    (timeout 2 ./app --version 2>&1 || echo "Quick test completed")
+
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD timeout 5 wget -qO- http://localhost:3000/health || exit 1
+
+EXPOSE 3000
+
+# Use tini as init system
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["./app"]

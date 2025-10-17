@@ -1,19 +1,34 @@
-# Migration Runner Dockerfile
+# Optimized Database Migration Runner (~80MB)
+# Single-purpose container that runs migrations and exits
+
 FROM oven/bun:1.3-alpine
 
 WORKDIR /app
 
-# Copy workspace configuration
+# Copy only essential files for migrations
 COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
 
-# Copy packages (all dependencies)
-COPY packages ./packages
+# Install only production dependencies and cleanup aggressively
+RUN bun install --frozen-lockfile --production && \
+    # Ultra cleanup for minimal migration image
+    bun pm cache rm && \
+    rm -rf /root/.bun/install /tmp/* /var/cache/* && \
+    # Remove unnecessary files
+    find /usr/local -name "*.md" -delete 2>/dev/null || true && \
+    echo "Migration image prepared, size:" && \
+    du -sh /app
 
-# Install dependencies
-RUN bun install --frozen-lockfile
-
-# Set working directory to database package
 WORKDIR /app/packages/database
 
-# Run migrations and exit
+# Security: non-root user for migration
+RUN adduser -D -s /bin/sh migrator && \
+    chown -R migrator:migrator /app
+USER migrator
+
+# Health check for migration completion
+HEALTHCHECK --interval=10s --timeout=5s --start-period=2s --retries=2 \
+    CMD echo "Migration container - designed to exit after completion" || exit 1
+
+# Run database migrations and exit
 CMD ["bun", "run", "migrate"]

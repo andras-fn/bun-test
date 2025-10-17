@@ -1,0 +1,47 @@
+# Test 6: Maximum optimization - all flags
+FROM oven/bun:1.3-alpine AS builder
+
+# Install strip for symbol removal
+RUN apk add --no-cache binutils
+
+WORKDIR /app
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+RUN echo "=== Test 6: Maximum optimization ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64-musl-modern \
+    --minify \
+    --bytecode \
+    --define:process.env.NODE_ENV=\"production\" \
+    --define:DEBUG=\"false\" \
+    --define:DEVELOPMENT=\"false\" \
+    --asset-naming="[name].[ext]" && \
+    echo "Before strip: $(du -h app)" && \
+    strip --strip-all app && \
+    echo "After strip: $(du -h app)" && \
+    chmod +x app
+
+# Minimal Alpine with aggressive cleanup
+FROM alpine:3.19
+RUN apk add --no-cache libstdc++ libgcc && \
+    rm -rf \
+    /var/cache/apk/* \
+    /tmp/* \
+    /var/tmp/* \
+    /usr/share/man \
+    /usr/share/doc \
+    /usr/share/info \
+    /usr/share/locale && \
+    adduser -D -s /sbin/nologin -u 1000 app
+
+WORKDIR /app
+COPY --from=builder /app/apps/api/app ./app
+USER 1000
+EXPOSE 3001
+CMD ["./app"]

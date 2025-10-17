@@ -1,0 +1,54 @@
+# Optimized Bun executable with size focus
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+
+# Compile with size optimization focus
+RUN echo "=== Size-optimized compilation ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64 \
+    --minify \
+    --define:process.env.NODE_ENV=\"production\" \
+    --sourcemap=none && \
+    chmod +x app && \
+    echo "Before optimization: $(du -h app)" && \
+    # Try UPX compression if available
+    (apk add --no-cache upx 2>/dev/null && upx --best --lzma app 2>/dev/null || echo "UPX compression unavailable") && \
+    echo "Final size: $(du -h app)"
+
+# Ultra-minimal runtime with distroless approach
+FROM alpine:3.19
+
+# Install only essential runtime libs
+RUN apk add --no-cache \
+    libstdc++ \
+    libgcc && \
+    rm -rf /var/cache/apk/* && \
+    # Create minimal user with no shell or home
+    adduser -D -s /sbin/nologin -u 1000 app
+
+WORKDIR /app
+
+# Copy just the executable
+COPY --from=builder /app/apps/api/app ./app
+
+# Set ownership and permissions
+RUN chown app:app ./app && chmod 755 ./app
+
+USER app
+EXPOSE 3001
+
+# Use exec form to avoid shell overhead
+CMD ["./app"]

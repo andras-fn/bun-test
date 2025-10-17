@@ -1,68 +1,60 @@
-# Use Bun 1.3 Alpine image
-FROM oven/bun:1.3-alpine AS base
+# OPTIMAL: Bun compiled executable - 120MB final size
+# Uses baseline CPU target + musl + bytecode for best size/compatibility balance
 
-# Install dependencies only when needed
-FROM base AS deps
+FROM oven/bun:1.3-alpine AS builder
+
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lockb ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/api/package.json ./apps/api/
-COPY packages/database/package.json ./packages/database/
-COPY packages/types/package.json ./packages/types/
+# Copy package files for dependency resolution
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
 
-# Install dependencies
+# Install all dependencies (needed for TypeScript compilation)
 RUN bun install --frozen-lockfile
 
-# Build the source code only when needed
-FROM base AS builder
+WORKDIR /app/apps/api
+
+# Optimal compilation settings based on testing:
+# - baseline: Better compatibility + smaller size than modern
+# - musl: Matches Alpine runtime, smaller than glibc  
+# - bytecode: Faster startup time
+# - minify: Code size reduction
+RUN echo "=== Optimal Compilation: baseline + musl + bytecode ===" && \
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64-musl-baseline \
+    --minify \
+    --bytecode \
+    --define:process.env.NODE_ENV=\"production\" \
+    --define:DEBUG=\"false\" \
+    --asset-naming="[name].[ext]" && \
+    chmod +x app && \
+    echo "Final executable size: $(du -h app)"
+
+# Minimal Alpine runtime with essential C++ libraries
+FROM alpine:3.19
+
+# Install minimal C++ runtime (required for Bun executables)
+# Remove all unnecessary packages and cache
+RUN apk add --no-cache libstdc++ libgcc && \
+    rm -rf /var/cache/apk/* /tmp/* /var/tmp/* && \
+    adduser -D -s /sbin/nologin -u 1000 app
+
 WORKDIR /app
 
-# Copy node_modules from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
+# Copy the optimized executable
+COPY --from=builder /app/apps/api/app ./app
 
-# Copy source code
-COPY . .
+# Set minimal ownership (no chmod needed, already set in builder)
+USER 1000
 
-# Set production environment for web build
-ENV NODE_ENV=production
-ENV VITE_API_URL=http://localhost:3001
-
-# Build applications
-RUN bun run build:web
-RUN bun run build:api
-
-# Production image, copy only production files
-FROM oven/bun:1.3-alpine AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV PORT=3001
-
-# Create non-root user
-RUN addgroup --system --gid 1001 bungroup
-RUN adduser --system --uid 1001 bunuser
-
-# Copy built applications
-COPY --from=builder --chown=bunuser:bungroup /app/apps/api/dist ./api/
-COPY --from=builder --chown=bunuser:bungroup /app/apps/web/dist ./web/
-COPY --from=builder --chown=bunuser:bungroup /app/packages ./packages/
-
-# Copy package.json for production dependencies
-COPY --from=builder --chown=bunuser:bungroup /app/apps/api/package.json ./api/
-COPY --from=deps --chown=bunuser:bungroup /app/apps/api/node_modules ./api/node_modules/
-
-USER bunuser
+# Health check for production readiness
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD timeout 5 wget -qO- http://localhost:3001/health || exit 1
 
 EXPOSE 3001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD bun -e "fetch('http://localhost:3001/health').then(r => r.ok ? process.exit(0) : process.exit(1))" || exit 1
-
-CMD ["bun", "run", "api/index.js"]
+# Direct execution (no shell, no init system needed for simple apps)
+CMD ["./app"]

@@ -1,0 +1,63 @@
+# Production-ready Dockerfile for Bun compiled executable
+# This creates a single executable from the Bun application
+
+# Build stage - Use Alpine for musl compatibility
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files for dependency installation
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+
+# Install all dependencies
+RUN bun install --frozen-lockfile
+
+# Change to API directory for compilation
+WORKDIR /app/apps/api
+
+# Compile the application to a single executable
+# Using bun-linux-x64 target for Alpine/musl compatibility
+RUN bun build src/index.ts --compile --outfile=app --target=bun-linux-x64 --minify && \
+    chmod +x app && \
+    echo "Compiled executable size: $(du -h app)"
+
+# Production stage - Minimal Alpine runtime
+FROM alpine:3.19
+
+# Install essential runtime dependencies:
+# - ca-certificates: For HTTPS/TLS connections
+# - tini: Proper init system for containers
+# - libstdc++, libgcc: C++ runtime libraries required by Bun executable
+RUN apk add --no-cache \
+    ca-certificates \
+    tini \
+    libstdc++ \
+    libgcc && \
+    rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy the compiled executable from builder stage
+COPY --from=builder /app/apps/api/app ./app
+
+# Create non-root user for security
+RUN adduser -D -s /bin/sh appuser && \
+    chown appuser:appuser ./app && \
+    chmod +x ./app
+
+# Switch to non-root user
+USER appuser
+
+# Health check to ensure the API is responding
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD timeout 5 wget -qO- http://localhost:3001/health || exit 1
+
+# Expose the API port
+EXPOSE 3001
+
+# Use tini as init system and run the executable
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["./app"]

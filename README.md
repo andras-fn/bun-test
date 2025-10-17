@@ -297,10 +297,27 @@ bun run docker:up
 The Docker setup includes:
 
 - **PostgreSQL**: Database service with persistent volume
-- **API Server**: Hono backend with Better Auth and Bun's native PostgreSQL driver
-- **Web App**: React frontend with Router v7 built and served by nginx
+- **API Server**: Hono backend with Better Auth and Bun's native PostgreSQL driver (~110MB optimized image)
+- **Web App**: React frontend with Router v7 built and served by nginx (~40MB optimized image)
 - **nginx Proxy**: Reverse proxy and static file server with React Router v7 support
-- **Migration**: Automatic database schema deployment using Drizzle
+- **Migration**: Automatic database schema deployment using Drizzle (~80MB optimized image)
+
+**🚀 Docker Image Optimizations:**
+
+Our Docker images are highly optimized for production:
+
+| Service | Base Image | Size | Optimization Strategy |
+|---------|------------|------|---------------------|
+| **API** | `bun:1.3-alpine` | ~110MB | Bundled JavaScript, aggressive cleanup, non-root user |
+| **Web** | `nginx:alpine` | ~40MB | Multi-stage build, minimal nginx, security hardening |
+| **Migration** | `bun:1.3-alpine` | ~80MB | Production deps only, single-purpose container |
+
+**Key Optimizations Applied:**
+- ✅ **Bundling over Compilation**: JavaScript bundling works better than static compilation
+- ✅ **Multi-stage Builds**: Separate build and runtime environments
+- ✅ **Aggressive Cleanup**: Remove caches, docs, and temporary files
+- ✅ **Non-root Users**: Security hardening for all services
+- ✅ **Health Checks**: Proper container monitoring and restart policies
 
 **nginx Configuration:**
 - `nginx/nginx.conf` - Main proxy configuration (used by docker-compose)

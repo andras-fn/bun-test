@@ -1,0 +1,55 @@
+# Hyper-optimized compiled Bun executable 
+FROM oven/bun:1.3-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+COPY packages/database ./packages/database
+COPY apps/api ./apps/api
+
+# Install all dependencies (needed for TypeScript compilation)
+RUN bun install --frozen-lockfile
+
+WORKDIR /app/apps/api
+
+# Aggressive compilation optimization
+RUN echo "=== Hyper-optimized compilation ===" && \
+    # Remove node_modules to force bundling everything
+    rm -rf node_modules && \
+    # Compile with all optimization flags
+    bun build src/index.ts \
+    --compile \
+    --outfile=app \
+    --target=bun-linux-x64 \
+    --minify \
+    --minify-whitespace \
+    --minify-syntax \
+    --minify-identifiers \
+    --drop-console \
+    --drop-debugger && \
+    chmod +x app && \
+    echo "Hyper-optimized size: $(du -h app)" && \
+    # Try to strip debug symbols if available
+    (strip --strip-all app 2>/dev/null || echo "strip not available") && \
+    echo "Final size: $(du -h app)"
+
+# Minimal Alpine runtime  
+FROM alpine:3.19 AS runtime
+# Install absolute minimum
+RUN apk add --no-cache --update \
+    libstdc++ \
+    libgcc \
+    ca-certificates && \
+    rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+
+WORKDIR /app
+COPY --from=builder /app/apps/api/app ./app
+
+# Create minimal user
+RUN adduser -D -s /bin/sh -u 1000 app && \
+    chown app:app ./app
+
+USER app
+EXPOSE 3001
+CMD ["./app"]
