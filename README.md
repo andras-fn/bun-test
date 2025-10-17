@@ -84,6 +84,8 @@ cp .env.example .env
 # The .env file contains:
 DATABASE_URL="postgresql://todouser:todopass@localhost:5432/todoapp"
 AUTH_SECRET="your-secret-key-here-change-in-production-min-32-chars"
+# AUTH_BASE_URL="http://localhost:3001"      # Optional: auth server URL
+# AUTH_TRUSTED_ORIGIN="http://localhost:5173" # Optional: trusted frontend origin
 NODE_ENV="development"
 PORT=3001
 VITE_API_URL="http://localhost:3001"
@@ -91,9 +93,9 @@ VITE_API_URL="http://localhost:3001"
 
 **Environment Files:**
 
-- `.env` - Local development configuration
-- `.env.docker` - Docker/containerized configuration  
-- `.env.production.example` - Production deployment template
+- `.env` - Local development configuration (with optional auth URLs)
+- `.env.docker` - Docker/containerized configuration (with auth proxy settings)
+- `.env.production.example` - Production deployment template (with HTTPS auth URLs)
 
 ### 4. Database Migration
 
@@ -216,10 +218,23 @@ bun run docker:logs      # View container logs
 
 ### Authentication (Better Auth)
 
+**Environment-Aware Configuration:**
+- **Development**: Direct API connection (`http://localhost:3001`)
+- **Docker/Production**: Through nginx proxy (`/api` routes)
+- **Security**: Automatic secure cookies in production, CORS protection
+
+**API Endpoints:**
 - `POST /api/auth/sign-up/email` - Register new user
 - `POST /api/auth/sign-in/email` - Login user
 - `POST /api/auth/sign-out` - Logout user
 - `GET /api/auth/session` - Get current session
+
+**Auth Environment Variables:**
+```bash
+# Optional - automatically configured per environment
+AUTH_BASE_URL="http://localhost:3001"        # Dev: direct API
+AUTH_TRUSTED_ORIGIN="http://localhost:5173"  # Dev: Vite server
+```
 
 ### Todos (Protected Routes)
 

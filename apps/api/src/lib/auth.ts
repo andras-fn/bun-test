@@ -26,12 +26,24 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // Update session every day
     cookieAttributes: {
       httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
+      secure: process.env.NODE_ENV === "production", // Enable secure cookies in production
       sameSite: "lax",
       path: "/",
     },
   },
   secret: process.env.AUTH_SECRET || "your-secret-key-here",
-  baseURL: "http://localhost:3001",
-  trustedOrigins: ["http://localhost:5173"],
+  baseURL:
+    process.env.NODE_ENV === "production"
+      ? process.env.AUTH_BASE_URL || "http://localhost:3000/api" // Production: through nginx proxy
+      : "http://localhost:3001", // Development: direct to API server
+  trustedOrigins:
+    process.env.NODE_ENV === "production"
+      ? [
+          process.env.AUTH_TRUSTED_ORIGIN || "http://localhost:3000", // Production: nginx proxy
+          "http://localhost:3000", // Docker development
+        ]
+      : [
+          "http://localhost:5173", // Vite dev server
+          "http://localhost:3000", // Local nginx
+        ],
 });
